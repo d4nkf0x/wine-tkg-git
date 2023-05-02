@@ -17,7 +17,6 @@ jobs:
           rustup target add i686-unknown-linux-gnu
           cd proton-tkg
           sed -i 's/distro=""/distro="debuntu"/' proton-tkg.cfg
-          sed -i 's/uninstaller="false"/uninstaller="true"/' proton-tkg.cfg
           sed -i 's/LOCAL_PRESET=""/LOCAL_PRESET="none"/' proton-tkg.cfg
           echo '_ci_build="true"' >> proton-tkg.cfg
           touch tarplz
