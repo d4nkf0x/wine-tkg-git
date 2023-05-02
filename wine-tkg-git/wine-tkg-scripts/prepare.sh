@@ -48,7 +48,6 @@ _exit_cleanup() {
     echo "_proton_force_LAA=${_proton_force_LAA}" >> "$_proton_tkg_path"/proton_tkg_token
     echo "_proton_shadercache_path=${_proton_shadercache_path}" >> "$_proton_tkg_path"/proton_tkg_token
     echo "_proton_winetricks=${_proton_winetricks}" >> "$_proton_tkg_path"/proton_tkg_token
-    echo "_proton_dxvk_async=${_proton_dxvk_async}" >> "$_proton_tkg_path"/proton_tkg_token
     echo "_proton_use_steamhelper=${_proton_use_steamhelper}" >> "$_proton_tkg_path"/proton_tkg_token
     echo "_proton_mf_hacks=${_proton_mf_hacks}" >> "$_proton_tkg_path"/proton_tkg_token
     echo "_dxvk_dxgi=${_dxvk_dxgi}" >> "$_proton_tkg_path"/proton_tkg_token
@@ -311,7 +310,7 @@ msg2 ''
     if [ ! -e "$_where"/BIG_UGLY_FROGMINER ] && [ -z "$_LOCAL_PRESET" ]; then
       msg2 "No _LOCAL_PRESET set in .cfg. Please select your desired base (or hit enter for default) :"
       warning "! \"mainline\" and \"staging\" options will make clean & untouched wine and wine-staging builds, ignoring your .cfg settings !"
-      warning "! \"valve\" profiles will use Valve proton wine trees instead of upstream, ignoring many incompatibble .cfg settings !"
+      warning "! \"valve\" profiles will use Valve proton wine trees instead of upstream, ignoring many incompatible .cfg settings !"
       warning "! \"default-tkg\" profile will use the main customization.cfg and wine-tkg-profiles/advanced-customization.cfg files !"
 
       i=0
@@ -392,7 +391,6 @@ msg2 ''
     _use_esync="false"
     _use_fsync="false"
     _use_fastsync="false"
-    _fsync_futex_waitv="false"
 #    _use_staging="false"
     _proton_fs_hack="false"
     _proton_rawinput="false"
@@ -591,10 +589,12 @@ _prepare() {
     cd "${srcdir}"/"${_winesrcdir}"
     # change back to the wine upstream commit that this version of wine-staging is based in
     msg2 'Changing wine HEAD to the wine-staging base commit...'
-    if [ ! -e ../"$_stgsrcdir"/staging/upstream-commit ] || $( git merge-base "$( cat ../"$_stgsrcdir"/staging/upstream-commit )" --is-ancestor "$(../"$_stgsrcdir"/patches/patchinstall.sh --upstream-commit)" ); then
-      msg2 "Using patchinstall.sh --upstream-commit"
-      # Use patchinstall.sh --upstream-commit
-      git -c advice.detachedHead=false checkout "$(../"$_stgsrcdir"/patches/patchinstall.sh --upstream-commit)"
+    if [ -e "$_stgsrcdir"/patches/patchinstall.sh ]; then
+      if [ ! -e ../"$_stgsrcdir"/staging/upstream-commit ] || $( git merge-base "$( cat ../"$_stgsrcdir"/staging/upstream-commit )" --is-ancestor "$(../"$_stgsrcdir"/patches/patchinstall.sh --upstream-commit)" ); then
+        msg2 "Using patchinstall.sh --upstream-commit"
+        # Use patchinstall.sh --upstream-commit
+        git -c advice.detachedHead=false checkout "$(../"$_stgsrcdir"/patches/patchinstall.sh --upstream-commit)"
+      fi
     else
       msg2 "Using upstream-commit file"
       # Use upstream-commit file if patchinstall.sh --upstream-commit doesn't report the same upstream commit target
@@ -918,11 +918,19 @@ _prepare() {
 	  else
 	    _staging_args=$( printf "%s" "${_staging_args[*]}" )
 	  fi
-	  msg2 "Applying wine-staging patches... \n     Staging overrides used, if any: ${_staging_args}" && echo -e "\nStaging overrides, if any: ${_staging_args}\n" >> "$_where"/last_build_config.log && echo -e "\nApplying wine-staging patches..." >> "$_where"/prepare.log
-	  "${srcdir}"/"${_stgsrcdir}"/patches/patchinstall.sh DESTDIR="${srcdir}/${_winesrcdir}" --all $_staging_args >> "$_where"/prepare.log 2>&1 || (error "Patch application has failed. The error was logged to $_where/prepare.log for your convenience."; msg2 "To use the last known good mainline version, please set _plain_version=\"$_last_known_good_mainline\" in your .cfg"; msg2 "To use the last known good staging version, please set _staging_version=\"$_last_known_good_staging\" in your .cfg (requires _use_staging=\"true\")" && exit 1)
+	  # Not strictly necessary, but we haven't used the py script til now, so let's be conservative
+	  if ( cd "${srcdir}"/"${_stgsrcdir}" && ! git merge-base --is-ancestor f2f8b949b1ae1bedc2b3b16edc1d09a08110d2f6 HEAD ); then
+	    _staging_script="patches/patchinstall.sh"
+	  else
+	    _staging_script="staging/patchinstall.py"
+	  fi
+	  msg2 "Applying wine-staging patches using $_staging_script... \n     Staging overrides used, if any: ${_staging_args}" && echo -e "\nStaging overrides, if any: ${_staging_args}\n" >> "$_where"/last_build_config.log && echo -e "\nApplying wine-staging patches..." >> "$_where"/prepare.log
+	  "${srcdir}"/"${_stgsrcdir}"/$_staging_script DESTDIR="${srcdir}/${_winesrcdir}" --all $_staging_args >> "$_where"/prepare.log 2>&1 || (error "Patch application has failed. The error was logged to $_where/prepare.log for your convenience."; msg2 "To use the last known good mainline version, please set _plain_version=\"$_last_known_good_mainline\" in your .cfg"; msg2 "To use the last known good staging version, please set _staging_version=\"$_last_known_good_staging\" in your .cfg (requires _use_staging=\"true\")" && exit 1)
 
 	  # Remove staging version tag
-	  sed -i "s/  (Staging)//g" "${srcdir}"/"${_winesrcdir}"/libs/wine/Makefile.in
+	  if [ -e "${srcdir}"/"${_winesrcdir}"/libs/wine/Makefile.in ]; then
+	    sed -i "s/  (Staging)//g" "${srcdir}"/"${_winesrcdir}"/libs/wine/Makefile.in
+	  fi
 	  _commitmsg="03-staging" _committer
 	fi
 
